@@ -1,0 +1,30 @@
+{
+  "name": "@wave-av/conferencing-bridge",
+  "version": "0.1.0",
+  "description": "Bidirectional bridge between WAVE feeds and conferencing apps (Zoom, Teams, Meet, Riverside, Squadcast)",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./ingress": "./dist/ingress/index.js",
+    "./egress": "./dist/egress/index.js",
+    "./types": "./dist/types/index.js"
+  },
+  "engines": { "node": ">=20.0.0" },
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "typescript": "^5.7.3",
+    "vitest": "^4.0.18"
+  }
+}

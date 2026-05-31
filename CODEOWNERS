@@ -1,0 +1,8 @@
+# wave-conferencing-bridge — code owners.
+# Layer 0 (Operator) of the WAVE Protocol Plane.
+
+* @wave-av/streaming-team
+
+/src/types/  @wave-av/streaming-team
+/docs/       @wave-av/streaming-team
+/.github/    @wave-av/streaming-team
