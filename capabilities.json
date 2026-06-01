@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "1",
+  "repo": "wave-av/wave-conferencing-bridge",
+  "version": "0.1.0",
+  "lifecycle": "alpha",
+  "planeLayer": 0,
+  "foundationPin": "v1",
+  "maintainers": [{ "team": "operator" }],
+  "exposes": {
+    "hardwareDrivers": [
+      { "device": "cmio-virtual-camera", "vendor": "apple" },
+      { "device": "directshow-virtual-camera", "vendor": "microsoft" },
+      { "device": "v4l2loopback", "vendor": "linux" }
+    ]
+  },
+  "consumes": {
+    "waveProducts": [
+      { "repo": "wave-av/wave-gateway", "endpoint": "/feed/{slug}" }
+    ],
+    "thirdParty": [
+      { "service": "zoom-meeting-sdk", "licenseGated": true },
+      { "service": "teams-rtmp-ingest", "licenseGated": false },
+      { "service": "meet-rtmp-ingest", "licenseGated": false }
+    ],
+    "foundationFrameworks": ["frameworks/protocol-plane", "frameworks/platform-registry"]
+  },
+  "tags": ["operator", "public", "conferencing", "virtual-camera", "rtmp", "build-on-wave"]
+}
