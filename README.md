@@ -58,3 +58,8 @@ native drivers in companion repos may have their own license posture
 filters are Microsoft-blessed and ship under our MIT).
 
 [plane]: https://github.com/wave-av/wave-foundation/blob/master/frameworks/protocol-plane/README.md
+
+---
+
+<!-- wave-standard-footer -->
+<sub><b><a href="https://wave.online">wave.online</a></b> &nbsp;·&nbsp; <a href="https://docs.wave.online">Docs</a> &nbsp;·&nbsp; <a href="https://dev.wave.online">Developers</a> &nbsp;·&nbsp; <a href="https://agents.wave.online">For agents</a></sub>
