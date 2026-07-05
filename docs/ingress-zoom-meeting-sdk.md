@@ -40,18 +40,21 @@ planMeetingSdkBotFarm(config)         bindMeetingSdkIngress(config)
 - **Config** is validated by zod (`src/types/meeting-sdk.ts`). `waveTarget` is a
   discriminated union on `mode` (`whip` | `rtmp`).
 - **Credentials** are referenced by env-var NAME, never value
-  (`credentialRef` → defaults `ZOOM_MEETING_SDK_KEY` / `ZOOM_MEETING_SDK_SECRET`).
+  (`credentialRef` → defaults `ZOOM_APPS_CLIENT_ID` / `ZOOM_APPS_CLIENT_SECRET`).
   The bot reads them at launch under `doppler run`.
 - **`armed`** is `true` only when both credential env vars are present. Until
   then every binding's `plan` is `INERT: … not set — planning only, no Zoom join`.
 
 ## What arms it
 
-1. A Zoom Marketplace **Meeting SDK** app exists (task #87) — this is a DISTINCT
-   credential from the OAuth / Server-to-Server / Zoom-Apps client secrets.
-2. `ZOOM_MEETING_SDK_KEY` + `ZOOM_MEETING_SDK_SECRET` are added to Doppler
-   (`wave/prd`). **As of 2026-07-04 these are NOT in Doppler** — only
-   `ZOOM_CLIENT_*`, `ZOOM_APPS_*`, `ZOOM_S2S_*` are. This is the M2 gate.
+1. The credentials that sign the Meeting-SDK JWT. Standalone Marketplace
+   **Meeting SDK** apps are deprecated — a **General app's** Client ID / Client
+   Secret now serve as the Meeting-SDK "SDK Key"/"SDK Secret". For WAVE that
+   General app is already provisioned as `ZOOM_APPS_CLIENT_ID` /
+   `ZOOM_APPS_CLIENT_SECRET` (verified 2026-07-04 by public Client-ID match).
+2. Because those are **already in Doppler** (`wave/prd`), the credential gate is
+   satisfied. What remains for Wave-2 is the runtime: adding the Zoom Meeting
+   SDK dependency + the headless client that performs the join and media pull.
 
 ## Wave-2 (not in this PR)
 

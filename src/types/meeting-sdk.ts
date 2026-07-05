@@ -20,11 +20,13 @@
 import { z } from 'zod';
 
 /**
- * Names (not values) of the env vars holding the Zoom Meeting-SDK credentials.
- * The Meeting-SDK "SDK Key"/"SDK Secret" are a DISTINCT credential from the
- * OAuth / Server-to-Server / Zoom-Apps client secrets — a separate Zoom
- * Marketplace "Meeting SDK" app (task #87). They are read from the environment
- * at bot launch; they never appear in config or in this repo.
+ * Names (not values) of the env vars holding the credentials that sign the
+ * Meeting-SDK JWT. Standalone Marketplace "Meeting SDK" apps are DEPRECATED —
+ * a General app's Client ID / Client Secret now serve as the Meeting-SDK
+ * "SDK Key"/"SDK Secret" for JWT signing. For WAVE that General app is the one
+ * already in Doppler as ZOOM_APPS_CLIENT_ID / ZOOM_APPS_CLIENT_SECRET (verified
+ * by public Client-ID match). These are read from the environment at bot launch
+ * under `doppler run`; they never appear in config or in this repo.
  */
 export const MeetingSdkCredentialRefSchema = z.object({
   keyEnv: z.string().min(1),
@@ -32,10 +34,14 @@ export const MeetingSdkCredentialRefSchema = z.object({
 });
 export type MeetingSdkCredentialRef = z.infer<typeof MeetingSdkCredentialRefSchema>;
 
-/** Default credential env-var names, matching the WAVE Doppler convention. */
+/**
+ * Default credential env-var names. Points at the WAVE General app's client
+ * credentials already provisioned in Doppler (there is NO ZOOM_MEETING_SDK_*
+ * secret anywhere — the standalone Meeting-SDK app class is deprecated).
+ */
 export const DEFAULT_MEETING_SDK_CREDENTIAL_REF: MeetingSdkCredentialRef = {
-  keyEnv: 'ZOOM_MEETING_SDK_KEY',
-  secretEnv: 'ZOOM_MEETING_SDK_SECRET',
+  keyEnv: 'ZOOM_APPS_CLIENT_ID',
+  secretEnv: 'ZOOM_APPS_CLIENT_SECRET',
 };
 
 /**

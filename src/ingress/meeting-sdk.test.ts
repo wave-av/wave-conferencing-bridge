@@ -18,8 +18,8 @@ const baseBot: unknown = {
 };
 
 const armedEnv = {
-  ZOOM_MEETING_SDK_KEY: 'k',
-  ZOOM_MEETING_SDK_SECRET: 's',
+  ZOOM_APPS_CLIENT_ID: 'k',
+  ZOOM_APPS_CLIENT_SECRET: 's',
 } as NodeJS.ProcessEnv;
 
 describe('meeting-sdk types', () => {
@@ -49,12 +49,12 @@ describe('bindMeetingSdkIngress (inert by default)', () => {
     const b = bindMeetingSdkIngress(baseBot, {} as NodeJS.ProcessEnv);
     expect(b.armed).toBe(false);
     expect(b.plan).toContain('INERT');
-    expect(b.requiredEnv).toEqual(['ZOOM_MEETING_SDK_KEY', 'ZOOM_MEETING_SDK_SECRET']);
+    expect(b.requiredEnv).toEqual(['ZOOM_APPS_CLIENT_ID', 'ZOOM_APPS_CLIENT_SECRET']);
     expect(b.joinDelayMs).toBe(0);
   });
 
   it('arms only when BOTH credential env vars are present', () => {
-    expect(bindMeetingSdkIngress(baseBot, { ZOOM_MEETING_SDK_KEY: 'k' } as NodeJS.ProcessEnv).armed).toBe(false);
+    expect(bindMeetingSdkIngress(baseBot, { ZOOM_APPS_CLIENT_ID: 'k' } as NodeJS.ProcessEnv).armed).toBe(false);
     const armed = bindMeetingSdkIngress(baseBot, armedEnv);
     expect(armed.armed).toBe(true);
     expect(armed.plan).toContain('join meeting 12345678901');
