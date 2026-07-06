@@ -63,6 +63,7 @@ export function meetingSdkJwt(params: MeetingSdkJwtParams): string {
   if (!/^\d{9,11}$/.test(meetingNumber)) throw new Error('meeting-sdk jwt: meetingNumber must be 9-11 digits');
   if (role !== 0 && role !== 1) throw new Error('meeting-sdk jwt: role must be 0 or 1');
   if (!Number.isInteger(iat) || !Number.isInteger(exp)) throw new Error('meeting-sdk jwt: iat/exp must be integer unix seconds');
+  if (iat <= 0) throw new Error('meeting-sdk jwt: iat must be a positive unix timestamp');
   if (exp <= iat) throw new Error('meeting-sdk jwt: exp must be after iat');
   if (exp - iat > MEETING_SDK_MAX_TTL_SEC) throw new Error('meeting-sdk jwt: lifetime exceeds the 48h Zoom maximum');
   const header = { alg: 'HS256', typ: 'JWT' };

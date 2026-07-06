@@ -78,6 +78,7 @@ describe('meetingSdkJwt', () => {
     expect(() => meetingSdkJwt({ ...base, sdkKey: '' })).toThrow(/sdkKey/);
     expect(() => meetingSdkJwt({ ...base, sdkSecret: '' })).toThrow(/sdkSecret|secret/);
     expect(() => meetingSdkJwt({ ...base, meetingNumber: '123' })).toThrow(/meetingNumber/);
+    expect(() => meetingSdkJwt({ ...base, iat: -1, exp: 3600 })).toThrow(/positive unix timestamp/);
     expect(() => meetingSdkJwt({ ...base, exp: base.iat })).toThrow(/after iat/);
     expect(() => meetingSdkJwt({ ...base, exp: base.iat + MEETING_SDK_MAX_TTL_SEC + 1 })).toThrow(/48h/);
   });
