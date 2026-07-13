@@ -44,10 +44,11 @@ target_include_directories(wave_meeting_sdk_bot PRIVATE
   "${ZOOM_SDK_DIR}/h"
 )
 
-# TODO(host): link the Zoom Meeting SDK's shared library (name/path per the
-# distributed SDK — typically libmeetingsdk.so under qt_libs/ or a top-level
-# lib/ dir; confirm against the SDK's own README once mounted).
-target_link_directories(wave_meeting_sdk_bot PRIVATE "${ZOOM_SDK_DIR}/qt_libs" "${ZOOM_SDK_DIR}/lib")
+# RESOLVED against observed SDK zoom-meeting-sdk-linux_x86_64-7.1.0.4100
+# (2026-07-13, see ADAPTATION.md): libmeetingsdk.so lives at the SDK tree ROOT
+# (${ZOOM_SDK_DIR}), NOT under qt_libs/ or a lib/ dir. Qt runtime libs are under
+# qt_libs/. Both dirs are on the link path; the root supplies libmeetingsdk.so.
+target_link_directories(wave_meeting_sdk_bot PRIVATE "${ZOOM_SDK_DIR}" "${ZOOM_SDK_DIR}/qt_libs")
 target_link_libraries(wave_meeting_sdk_bot PRIVATE meetingsdk)
 
 install(TARGETS wave_meeting_sdk_bot RUNTIME DESTINATION bin)

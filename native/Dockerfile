@@ -49,8 +49,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /opt/wave
 
 COPY --from=build /build/build/wave_meeting_sdk_bot ./bin/wave_meeting_sdk_bot
+# Runtime shared libs. Observed SDK 7.1.0.4100 (see ADAPTATION.md): the core
+# libs (libmeetingsdk/libcml/libmpg123) live at the SDK ROOT, the Qt runtime
+# libs under qt_libs/. All must be on LD_LIBRARY_PATH for the bot to load.
+COPY --from=build /opt/zoom-meeting-sdk-linux/libmeetingsdk.so \
+     /opt/zoom-meeting-sdk-linux/libcml.so \
+     /opt/zoom-meeting-sdk-linux/libmpg123.so ./lib/
 COPY --from=build /opt/zoom-meeting-sdk-linux/qt_libs/ ./lib/
 ENV LD_LIBRARY_PATH=/opt/wave/lib
+# TODO(host, compile session): `ldd ./bin/wave_meeting_sdk_bot` on the armed
+# host to confirm no unresolved Qt/xcb/gl/dbus/gbm .so remain (qt_libs/ may nest
+# a Qt/ subdir not on the flat LD path) and pin any apt runtime deps above.
 
 COPY config.toml.example ./config.toml.example
 

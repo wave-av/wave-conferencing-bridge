@@ -80,3 +80,33 @@ and SIGTERMs the process.
   `sendVideoFrame`, `Leave`, `UninitSDK`), and the video decode inside
   `WaveLoopedVideoSource::feedLoop`. None of this compiles without the SDK
   mounted (`ZOOM_SDK_DIR`) on an x86_64 Linux host.
+
+## Observed SDK layout — `zoom-meeting-sdk-linux_x86_64-7.1.0.4100` (2026-07-13)
+
+Ground truth from the actual Marketplace download (108MB `.tar.xz` → 362MB
+extracted). This RESOLVES the `TODO(host)` guesses in `CMakeLists.txt` /
+`Dockerfile` about where the libs live. Populate `native/zoom-meeting-sdk-linux/`
+with this tree (see `HOST-REQUIREMENTS.md`).
+
+```
+zoom-meeting-sdk-linux/
+├── h/                     # C++ headers → ZOOM_SDK_DIR/h (matches include path)
+│   ├── zoom_sdk.h  meeting_service_interface.h  auth_service_interface.h …
+│   ├── meeting_service_components/  (meeting_video_interface.h, …)
+│   └── rawdata/           # raw video/audio injection headers (WaveLoopedVideoSource)
+├── libmeetingsdk.so       # ← MAIN SDK lib (202MB). TOP LEVEL, not qt_libs//lib/.
+├── libcml.so              # ← TOP LEVEL runtime dep
+├── libmpg123.so           # ← TOP LEVEL runtime dep (audio decode)
+├── qt_libs/               # Qt runtime libs (qt_libs/Qt/…) — needed at RUNTIME
+├── images/  json/  imjs/  new_home_page/  diagnostic/  release_info/
+└── readme.md              # NOTE: ships EMPTY (0 bytes) in 7.1.0.4100 — no dep list
+```
+
+**Key correction:** `libmeetingsdk.so` is at the SDK tree ROOT, so the CMake
+`target_link_directories` must include `${ZOOM_SDK_DIR}` itself (done), and the
+Dockerfile runtime stage must copy the top-level `.so` files into the image
+alongside `qt_libs/` (done). Because `readme.md` is empty, the exact apt runtime
+dep list (Qt/xcb/gl/dbus/gbm) is NOT documentable from the SDK — resolve it on
+the armed host via `ldd libmeetingsdk.so` during the compile session and pin the
+result into the Dockerfile's `TODO(host)` apt blocks (still marked, intentionally
+un-guessed).
