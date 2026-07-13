@@ -1,0 +1,50 @@
+# native/config.toml.example — task #88/M2 headless bot config.
+#
+# Copy to config.toml on the ARMED host (never commit a filled-in copy — no
+# secrets belong in this repo; see ../SECRETS.md). Every credential below is
+# read from the environment at process start under `doppler run`, mirroring
+# `DEFAULT_MEETING_SDK_CREDENTIAL_REF` in `../src/types/meeting-sdk.ts`
+# (ZOOM_APPS_CLIENT_ID / ZOOM_APPS_CLIENT_SECRET — the WAVE General app; the
+# standalone "Meeting SDK" app class is deprecated). This file carries NAMES
+# and shape only, exactly like the TS scaffold.
+#
+# Adapted from the upstream `zoom/meetingsdk-headless-linux-sample` config
+# shape (Wave-2 driver — see ADAPTATION.md for the full mapping).
+
+[zoom_app]
+# TODO(host): the Meeting SDK reads these as the "SDK Key"/"SDK Secret" at
+# InitSDK/Auth time. Populate via env at launch, never inline here:
+#   client_id     <- $ZOOM_APPS_CLIENT_ID
+#   client_secret <- $ZOOM_APPS_CLIENT_SECRET
+client_id_env = "ZOOM_APPS_CLIENT_ID"
+client_secret_env = "ZOOM_APPS_CLIENT_SECRET"
+
+[bot]
+# Display name the bot uses in the participant list (matches
+# MeetingSdkBotConfig.botDisplayName in ../src/types/meeting-sdk.ts).
+display_name = "WAVE Perception Bot"
+# TODO(host): path to the looped/watermarked clip fed into the custom
+# IZoomSDKVideoSource (LoopedVideoSource.uri in ../src/types/meeting-sdk.ts).
+video_loop_path = "/opt/wave/media/loop.mp4"
+video_fps = 30
+
+[join]
+# Populated per-launch by the TS process-driver adapter over the stdio IPC
+# `{"cmd":"join", ...}` message (see ../src/ingress/meeting-sdk-process-driver.ts)
+# — these fields are NOT read from this file at runtime, only documented here
+# for a manual/standalone run of the native binary.
+# meeting_number = "12345678901"
+# meeting_password = ""
+# join_token = ""   # the HS256 signature from meetingSdkJwt() — never the SDK secret itself
+
+[capture]
+# "raw" pulls per-participant tracks; "composited" pulls the gallery view.
+# Mirrors MeetingMediaCapture.kind in ../src/types/meeting-sdk-launch.ts.
+kind = "composited"
+
+[ipc]
+# The native binary speaks line-delimited JSON on stdin/stdout — see
+# ADAPTATION.md for the full ready→joined→media-frame→left contract. No
+# values here; this section exists to document that stdio, not a socket, is
+# the transport, so no port/host config is needed.
+transport = "stdio-json-lines"

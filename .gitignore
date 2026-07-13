@@ -8,6 +8,12 @@ dist/
 *.env
 *.env.*
 !*.env.example
+config.toml
+!config.toml.example
+
+# Zoom Meeting SDK for Linux — licensed vendor binaries, never committed (see native/HOST-REQUIREMENTS.md)
+native/zoom-meeting-sdk-linux/
+native/build/
 
 # >>> wave claude-project-chassis (managed) — do not edit between these markers >>>
 .claude/settings.local.json
