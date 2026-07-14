@@ -128,27 +128,46 @@ class AuthEvent : public IAuthServiceEvent {
       return;
     }
 
-    // Join as a no-login participant.
-    JoinParam jp;
-    jp.userType = SDK_UT_WITHOUT_LOGIN;
-    JoinParam4WithoutLogin& p = jp.param.withoutloginuserJoin;
-    p.meetingNumber = static_cast<UINT64>(std::strtoull(g_bot.join.meetingNumber.c_str(), nullptr, 10));
-    p.userName = g_bot.join.botDisplayName.c_str();
-    p.psw = g_bot.join.passcode.empty() ? nullptr : g_bot.join.passcode.c_str();
-    // Zoom's post-2026-03 policy ejects an unauthorized app join (connect →
-    // immediate disconnect). Present the authorized-join tokens when supplied:
-    // userZAK authenticates the bot as the host identity; join_token /
-    // app_privilege_token are the alternative meeting-scoped grants.
-    p.userZAK = g_bot.join.zak.empty() ? nullptr : g_bot.join.zak.c_str();
-    p.join_token = g_bot.join.joinToken.empty() ? nullptr : g_bot.join.joinToken.c_str();
-    p.app_privilege_token = g_bot.join.appPrivilegeToken.empty() ? nullptr : g_bot.join.appPrivilegeToken.c_str();
-    p.isVideoOff = false;  // we publish video via the external source
-    p.isAudioOff = true;   // bot sends no audio
+    const UINT64 mn = static_cast<UINT64>(std::strtoull(g_bot.join.meetingNumber.c_str(), nullptr, 10));
 
-    SDKError jerr = g_bot.meetingService->Join(jp);
-    if (jerr != SDKERR_SUCCESS) {
-      emitTerminalError("IMeetingService::Join failed (SDKError=" + std::to_string(static_cast<int>(jerr)) + ")");
-      quitLoop();
+    if (!g_bot.join.zak.empty()) {
+      // HOST-START via ZAK. Zoom's post-2026-03 policy ejects an unauthorized
+      // guest Join (connect → immediate DISCONNECT → ENDED). Hosting the meeting
+      // with the host's ZOOM access token is the sanctioned authorized path AND
+      // needs no pre-existing host — the bot starts the meeting itself and is the
+      // sole authorized participant, then publishes the external video source.
+      StartParam sp;
+      sp.userType = SDK_UT_WITHOUT_LOGIN;
+      StartParam4WithoutLogin& s = sp.param.withoutloginStart;
+      s.userZAK = g_bot.join.zak.c_str();
+      s.userName = g_bot.join.botDisplayName.c_str();
+      s.zoomuserType = ZoomUserType_EMAIL_LOGIN;  // ZAK is authoritative for identity
+      s.meetingNumber = mn;
+      s.isVideoOff = false;  // we publish video via the external source
+      s.isAudioOff = true;   // bot sends no audio
+      SDKError serr = g_bot.meetingService->Start(sp);
+      if (serr != SDKERR_SUCCESS) {
+        emitTerminalError("IMeetingService::Start failed (SDKError=" + std::to_string(static_cast<int>(serr)) + ")");
+        quitLoop();
+      }
+    } else {
+      // Guest Join (no ZAK) — works only for meetings that don't require an
+      // authorized app join; kept for local/dev meetings.
+      JoinParam jp;
+      jp.userType = SDK_UT_WITHOUT_LOGIN;
+      JoinParam4WithoutLogin& p = jp.param.withoutloginuserJoin;
+      p.meetingNumber = mn;
+      p.userName = g_bot.join.botDisplayName.c_str();
+      p.psw = g_bot.join.passcode.empty() ? nullptr : g_bot.join.passcode.c_str();
+      p.join_token = g_bot.join.joinToken.empty() ? nullptr : g_bot.join.joinToken.c_str();
+      p.app_privilege_token = g_bot.join.appPrivilegeToken.empty() ? nullptr : g_bot.join.appPrivilegeToken.c_str();
+      p.isVideoOff = false;
+      p.isAudioOff = true;
+      SDKError jerr = g_bot.meetingService->Join(jp);
+      if (jerr != SDKERR_SUCCESS) {
+        emitTerminalError("IMeetingService::Join failed (SDKError=" + std::to_string(static_cast<int>(jerr)) + ")");
+        quitLoop();
+      }
     }
   }
   void onLoginReturnWithReason(LOGINSTATUS, IAccountInfo*, LoginFailReason) override {}
