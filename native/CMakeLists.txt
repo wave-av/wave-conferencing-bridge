@@ -64,4 +64,12 @@ target_link_libraries(wave_meeting_sdk_bot PRIVATE
   Threads::Threads
 )
 
+# libmeetingsdk.so and the bundled Qt6 libs pull in a large X11/xcb/dbus/
+# fontconfig/xkbcommon transitive closure. We do NOT re-link that whole closure
+# into the bot at build time; --allow-shlib-undefined lets ld leave those
+# vendor-internal symbols unresolved at link (they are satisfied at runtime by
+# the loader against the deps apt-installed in the Dockerfile runtime stage +
+# the bundled qt_libs on LD_LIBRARY_PATH).
+target_link_options(wave_meeting_sdk_bot PRIVATE "-Wl,--allow-shlib-undefined")
+
 install(TARGETS wave_meeting_sdk_bot RUNTIME DESTINATION bin)

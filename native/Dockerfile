@@ -47,6 +47,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-6 libxcb1 libxcb-xfixes0 libxcb-shape0 libxcb-shm0 libxcb-randr0 \
     libxcb-image0 libxcb-keysyms1 libxcb-xtest0 libxfixes3 \
     libgbm1 libdrm2 libgl1 \
+    # Qt6 (from bundled qt_libs/) transitive deps surfaced by link + ldd:
+    # libfontconfig1 (FcFontSetDestroy), libxkbcommon0 (xkb_state_serialize_layout),
+    # libgssapi-krb5-2 (Qt6Network Kerberos), libegl1 (GL/EGL).
+    libfontconfig1 libxkbcommon0 libgssapi-krb5-2 libegl1 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -59,11 +63,17 @@ COPY --from=build /build/build/wave_meeting_sdk_bot ./bin/wave_meeting_sdk_bot
 COPY --from=build /opt/zoom-meeting-sdk-linux/libmeetingsdk.so \
      /opt/zoom-meeting-sdk-linux/libcml.so \
      /opt/zoom-meeting-sdk-linux/libmpg123.so ./lib/
+# The SDK ships each lib as a bare *.so file, but their SONAMEs are versioned
+# (libmeetingsdk.so.1, libmpg123.so.0 — confirmed via objdump), so the dynamic
+# loader looks for those names. Symlink them (libcml.so's SONAME is unversioned,
+# so it needs none).
+RUN ln -sf libmeetingsdk.so /opt/wave/lib/libmeetingsdk.so.1 \
+ && ln -sf libmpg123.so /opt/wave/lib/libmpg123.so.0
 COPY --from=build /opt/zoom-meeting-sdk-linux/qt_libs/ ./lib/
-ENV LD_LIBRARY_PATH=/opt/wave/lib
-# TODO(host, compile session): `ldd ./bin/wave_meeting_sdk_bot` on the armed
-# host to confirm no unresolved Qt/xcb/gl/dbus/gbm .so remain (qt_libs/ may nest
-# a Qt/ subdir not on the flat LD path) and pin any apt runtime deps above.
+# The bundled Qt6 libs are nested at qt_libs/Qt/lib/*.so.6 (confirmed on
+# 7.1.0.4100), so after the COPY they sit at /opt/wave/lib/Qt/lib — that dir
+# MUST be on LD_LIBRARY_PATH alongside the flat core libs in /opt/wave/lib.
+ENV LD_LIBRARY_PATH=/opt/wave/lib:/opt/wave/lib/Qt/lib
 
 COPY config.toml.example ./config.toml.example
 
