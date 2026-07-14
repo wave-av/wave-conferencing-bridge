@@ -57,6 +57,9 @@ std::optional<JoinCommand> parseJoinCommand(const std::string& line) {
   cmd.videoUri = extractString(line, "uri");
   cmd.videoLoop = extractBool(line, "loop", true);
   cmd.videoFps = extractInt(line, "fps", 30);
+  cmd.zak = extractString(line, "zak");
+  cmd.joinToken = extractString(line, "joinToken");
+  cmd.appPrivilegeToken = extractString(line, "appPrivilegeToken");
   return cmd;
 }
 

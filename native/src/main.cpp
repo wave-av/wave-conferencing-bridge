@@ -135,6 +135,13 @@ class AuthEvent : public IAuthServiceEvent {
     p.meetingNumber = static_cast<UINT64>(std::strtoull(g_bot.join.meetingNumber.c_str(), nullptr, 10));
     p.userName = g_bot.join.botDisplayName.c_str();
     p.psw = g_bot.join.passcode.empty() ? nullptr : g_bot.join.passcode.c_str();
+    // Zoom's post-2026-03 policy ejects an unauthorized app join (connect →
+    // immediate disconnect). Present the authorized-join tokens when supplied:
+    // userZAK authenticates the bot as the host identity; join_token /
+    // app_privilege_token are the alternative meeting-scoped grants.
+    p.userZAK = g_bot.join.zak.empty() ? nullptr : g_bot.join.zak.c_str();
+    p.join_token = g_bot.join.joinToken.empty() ? nullptr : g_bot.join.joinToken.c_str();
+    p.app_privilege_token = g_bot.join.appPrivilegeToken.empty() ? nullptr : g_bot.join.appPrivilegeToken.c_str();
     p.isVideoOff = false;  // we publish video via the external source
     p.isAudioOff = true;   // bot sends no audio
 
@@ -158,6 +165,12 @@ class AuthEvent : public IAuthServiceEvent {
 class MeetingEvent : public IMeetingServiceEvent {
  public:
   void onMeetingStatusChanged(MeetingStatus status, int iResult) override {
+    // Diagnostic (stderr only — never on the stdout JSON protocol channel): surface
+    // EVERY meeting-status transition so a silent join stall is observable. Zoom enum:
+    // 0=IDLE 1=CONNECTING 2=WAITINGFORHOST 3=INMEETING 4=DISCONNECTING 5=RECONNECTING
+    // 6=FAILED 7=ENDED 8=UNKNOWN 9=LOCKED 10=UNLOCKED 11=IN_WAITING_ROOM.
+    fprintf(stderr, "[meeting-status] status=%d iResult=%d\n", static_cast<int>(status), iResult);
+    fflush(stderr);
     switch (status) {
       case MEETING_STATUS_INMEETING:
         if (!g_bot.joinedEmitted) {

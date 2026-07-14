@@ -24,6 +24,14 @@ struct JoinCommand {
   std::string videoUri;        // LoopedVideoSource.uri
   bool videoLoop = true;
   int videoFps = 30;
+  // Zoom's post-2026-03 app-join-authorization tokens. A without-login bot is
+  // connected then immediately ejected (CONNECTING→DISCONNECTING→ENDED) unless it
+  // presents an authorized-join token. `zak` (ZOOM Access Key = authenticated host
+  // identity) is the primary path; `joinToken`/`appPrivilegeToken` are alternatives.
+  // All empty by default → unauthorized join (fails on meetings that require it).
+  std::string zak;                 // JoinParam4WithoutLogin.userZAK
+  std::string joinToken;           // JoinParam4WithoutLogin.join_token
+  std::string appPrivilegeToken;   // JoinParam4WithoutLogin.app_privilege_token
 };
 
 /** Parses one stdin line as a join command. Returns nullopt if it isn't one. */
