@@ -1,52 +1,196 @@
 // native/src/main.cpp — headless Zoom Meeting-SDK bot entrypoint, task #88/M2.
 //
-// HOST-GATED: requires the Zoom Meeting SDK for Linux (ZOOM_SDK_DIR) to
-// compile and an x86_64 Linux host to run — see ../HOST-REQUIREMENTS.md. Do
-// NOT expect this to build here; it is not claimed to compile on this
-// machine. Drives the join→ready→media-frames→leave stdio JSON-lines IPC the
-// TS process-driver adapter speaks (../../src/ingress/meeting-sdk-process-driver.ts).
+// HOST-GATED: requires the Zoom Meeting SDK for Linux (ZOOM_SDK_DIR) to compile
+// and an x86_64 Linux host to run — see ../HOST-REQUIREMENTS.md.
 //
-// TODO(host): once the SDK is mounted, replace every TODO(host) block below
-// with real Meeting SDK calls: InitSDK -> auth using the JWT the TS side
-// signs and sends in the join command -> IMeetingService::Join ->
-// setExternalVideoSource binding a WaveLoopedVideoSource (registered BEFORE
-// Join, per the SDK's requirement) -> pump the SDK's event loop until leave.
+// Drives the join→ready→media-frames→leave stdio JSON-lines IPC the TS
+// process-driver speaks (../../src/ingress/meeting-sdk-process-driver.ts):
+//   InitSDK → CreateAuthService → SDKAuth(jwt) → [glib main loop] →
+//   onAuthenticationReturn → CreateMeetingService → register raw video source →
+//   Join(without-login) → onMeetingStatusChanged(INMEETING) → emit "joined" →
+//   feed looped video until {"cmd":"leave"} → Leave → CleanUPSDK.
+//
+// The Meeting SDK for Linux is glib-driven (its libmeetingsdk.so NEEDs
+// libglib-2.0/gio/gobject — confirmed via objdump): SDK callbacks only dispatch
+// while a GMainLoop is running, so main() runs g_main_loop_run() and all SDK
+// calls happen on that loop thread. The stdin leave-watcher runs on its own
+// thread and marshals back onto the loop via g_main_context_invoke.
 
 #include <atomic>
-#include <chrono>
+#include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <string>
 #include <thread>
 
+#include <glib.h>
+
 #include "ipc.hpp"
 #include "wave_video_source.hpp"
 
-// TODO(host): #include "zoom_sdk.h", "auth_service_interface.h",
-// "meeting_service_interface.h", "meeting_service_components/meeting_video_interface.h"
-// once ZOOM_SDK_DIR/h is on the include path (see ../CMakeLists.txt).
+#include "auth_service_interface.h"
+#include "meeting_service_interface.h"
+#include "rawdata/zoom_rawdata_api.h"
+#include "zoom_sdk.h"
+#include "zoom_sdk_def.h"
+
+using namespace ZOOM_SDK_NAMESPACE;
 
 namespace {
 
-/** Watches stdin for `{"cmd":"leave"}` on a dedicated thread and flips `leaving` when seen. */
-void watchForLeave(std::atomic<bool>& leaving) {
-  std::string line;
-  while (std::getline(std::cin, line)) {
-    if (wave::ipc::isLeaveCommand(line)) {
-      leaving.store(true);
+// Shared bot state, all touched only on the glib loop thread except `leaving`.
+struct BotState {
+  wave::ipc::JoinCommand join;
+  IAuthService* authService = nullptr;
+  IMeetingService* meetingService = nullptr;
+  wave::WaveLoopedVideoSource* videoSource = nullptr;
+  GMainLoop* loop = nullptr;
+  bool joinedEmitted = false;
+  bool terminalEmitted = false;  // an error/left line already went out
+  std::atomic<bool> leaving{false};
+};
+
+BotState g_bot;
+
+void quitLoop() {
+  if (g_bot.loop != nullptr) g_main_loop_quit(g_bot.loop);
+}
+
+// Emit a terminal error exactly once, then note it so main()'s tail doesn't
+// double-report.
+void emitTerminalError(const std::string& message) {
+  if (g_bot.terminalEmitted) return;
+  g_bot.terminalEmitted = true;
+  wave::ipc::emitError(message);
+}
+
+// Fires every 5s on the loop thread while in-meeting — informational media-frame
+// heartbeat (seq = frames pushed by the video source so far).
+gboolean heartbeatTick(gpointer) {
+  if (g_bot.leaving.load()) return G_SOURCE_REMOVE;
+  const long frames = g_bot.videoSource ? g_bot.videoSource->framesSent() : 0;
+  wave::ipc::emitMediaFrame(frames, 0);
+  return G_SOURCE_CONTINUE;
+}
+
+gboolean forceQuit(gpointer) {
+  quitLoop();
+  return G_SOURCE_REMOVE;
+}
+
+// Runs on the loop thread (scheduled from the stdin watcher): leave the meeting
+// if in one, else quit directly. A short fallback timer forces quit if the
+// ENDED status never arrives.
+gboolean onLeaveRequested(gpointer) {
+  if (g_bot.meetingService != nullptr) {
+    g_bot.meetingService->Leave(LEAVE_MEETING);
+    g_timeout_add(3000, forceQuit, nullptr);
+  } else {
+    quitLoop();
+  }
+  return G_SOURCE_REMOVE;
+}
+
+class AuthEvent : public IAuthServiceEvent {
+ public:
+  void onAuthenticationReturn(AuthResult ret) override {
+    if (ret != AUTHRET_SUCCESS) {
+      emitTerminalError("SDK auth failed (AuthResult=" + std::to_string(static_cast<int>(ret)) + ")");
+      quitLoop();
       return;
     }
+    // Authenticated → create the meeting service and join.
+    if (CreateMeetingService(&g_bot.meetingService) != SDKERR_SUCCESS || g_bot.meetingService == nullptr) {
+      emitTerminalError("CreateMeetingService failed");
+      quitLoop();
+      return;
+    }
+    g_bot.meetingService->SetEvent(meetingEvent_);
+
+    // Register the raw external video source BEFORE Join so the SDK routes our
+    // frames instead of a real camera.
+    IZoomSDKVideoSourceHelper* vhelper = GetRawdataVideoSourceHelper();
+    if (vhelper == nullptr) {
+      emitTerminalError("GetRawdataVideoSourceHelper returned null (rawdata not available)");
+      quitLoop();
+      return;
+    }
+    SDKError vset = vhelper->setExternalVideoSource(g_bot.videoSource, FrameDataFormat_I420_FULL);
+    if (vset != SDKERR_SUCCESS) {
+      emitTerminalError("setExternalVideoSource failed (SDKError=" + std::to_string(static_cast<int>(vset)) + ")");
+      quitLoop();
+      return;
+    }
+
+    // Join as a no-login participant.
+    JoinParam jp;
+    jp.userType = SDK_UT_WITHOUT_LOGIN;
+    JoinParam4WithoutLogin& p = jp.param.withoutloginuserJoin;
+    p.meetingNumber = static_cast<UINT64>(std::strtoull(g_bot.join.meetingNumber.c_str(), nullptr, 10));
+    p.userName = g_bot.join.botDisplayName.c_str();
+    p.psw = g_bot.join.passcode.empty() ? nullptr : g_bot.join.passcode.c_str();
+    p.isVideoOff = false;  // we publish video via the external source
+    p.isAudioOff = true;   // bot sends no audio
+
+    SDKError jerr = g_bot.meetingService->Join(jp);
+    if (jerr != SDKERR_SUCCESS) {
+      emitTerminalError("IMeetingService::Join failed (SDKError=" + std::to_string(static_cast<int>(jerr)) + ")");
+      quitLoop();
+    }
   }
-  // stdin closed without an explicit leave (e.g. parent process died) — treat as leave too,
-  // so the bot never spins forever with a gone supervisor.
-  leaving.store(true);
+  void onLoginReturnWithReason(LOGINSTATUS, IAccountInfo*, LoginFailReason) override {}
+  void onLogout() override {}
+  void onZoomIdentityExpired() override {}
+  void onZoomAuthIdentityExpired() override {}
+
+  void setMeetingEvent(IMeetingServiceEvent* e) { meetingEvent_ = e; }
+
+ private:
+  IMeetingServiceEvent* meetingEvent_ = nullptr;
+};
+
+class MeetingEvent : public IMeetingServiceEvent {
+ public:
+  void onMeetingStatusChanged(MeetingStatus status, int iResult) override {
+    switch (status) {
+      case MEETING_STATUS_INMEETING:
+        if (!g_bot.joinedEmitted) {
+          g_bot.joinedEmitted = true;
+          // captureId = the meeting number (the session handle the TS side keys on).
+          wave::ipc::emitJoined(g_bot.join.meetingNumber, "composited");
+          g_timeout_add_seconds(5, heartbeatTick, nullptr);
+        }
+        break;
+      case MEETING_STATUS_FAILED:
+        emitTerminalError("meeting join failed (MeetingFailCode=" + std::to_string(iResult) + ")");
+        quitLoop();
+        break;
+      case MEETING_STATUS_ENDED:
+        // main()'s tail emits the single "left"; here we only stop the loop.
+        quitLoop();
+        break;
+      default:
+        break;
+    }
+  }
+};
+
+// stdin watcher thread: blocks on getline; on {"cmd":"leave"} (or EOF/parent
+// death) marshals a leave onto the loop thread.
+void watchForLeave() {
+  std::string line;
+  while (std::getline(std::cin, line)) {
+    if (wave::ipc::isLeaveCommand(line)) break;
+  }
+  g_bot.leaving.store(true);
+  g_main_context_invoke(nullptr, onLeaveRequested, nullptr);
 }
 
 }  // namespace
 
 int main() {
+  // 1) Block for the TS adapter's {"cmd":"join", ...} on the FIRST stdin line.
   std::string line;
-
-  // 1) join: block for the TS adapter's {"cmd":"join", ...} on the FIRST stdin line.
   if (!std::getline(std::cin, line)) {
     wave::ipc::emitError("stdin closed before a join command arrived");
     return 1;
@@ -56,48 +200,67 @@ int main() {
     wave::ipc::emitError("first stdin line was not a parseable join command");
     return 1;
   }
+  g_bot.join = *join;
 
-  // TODO(host): InitSDK(initParam), then authenticate using join->signature
-  // (the HS256 JWT already signed by meetingSdkJwt() on the TS side — see
-  // ../../src/ingress/meeting-sdk-jwt.ts). NEVER derive or hold the SDK
-  // secret here; only the pre-signed signature crosses the IPC boundary.
+  // 2) InitSDK.
+  InitParam initParam;
+  initParam.strWebDomain = "https://zoom.us";
+  initParam.strSupportUrl = "https://zoom.us";
+  initParam.emLanguageID = LANGUAGE_English;
+  initParam.enableLogByDefault = false;
+  if (InitSDK(initParam) != SDKERR_SUCCESS) {
+    wave::ipc::emitError("InitSDK failed");
+    return 1;
+  }
+
+  // 3) Auth with the pre-signed JWT (never the SDK secret — only the signature
+  //    crosses the IPC boundary; see ../../src/ingress/meeting-sdk-jwt.ts).
+  if (CreateAuthService(&g_bot.authService) != SDKERR_SUCCESS || g_bot.authService == nullptr) {
+    wave::ipc::emitError("CreateAuthService failed");
+    return 1;
+  }
+  static AuthEvent authEvent;
+  static MeetingEvent meetingEvent;
+  authEvent.setMeetingEvent(&meetingEvent);
+  g_bot.authService->SetEvent(&authEvent);
+
+  // Video source constructed now; the SDK owns its lifecycle once registered.
+  wave::WaveLoopedVideoSource videoSource(g_bot.join.videoUri, g_bot.join.videoFps);
+  g_bot.videoSource = &videoSource;
+
+  AuthContext authCtx;
+  authCtx.jwt_token = g_bot.join.signature.c_str();
+  if (g_bot.authService->SDKAuth(authCtx) != SDKERR_SUCCESS) {
+    wave::ipc::emitError("SDKAuth call rejected");
+    return 1;
+  }
   wave::ipc::emitReady();
 
-  // Register the custom video source BEFORE Join() — the Meeting SDK for
-  // Linux only routes external frames instead of a real camera when the
-  // source is set pre-join (see ../include/wave_video_source.hpp).
-  wave::WaveLoopedVideoSource videoSource(join->videoUri, join->videoFps);
-  // TODO(host): meetingVideoController->setExternalVideoSource(&videoSource);
+  // 4) Run the glib main loop: SDK callbacks (auth return, meeting status) fire
+  //    here and drive join → publish → leave. The stdin watcher marshals leave.
+  g_bot.loop = g_main_loop_new(nullptr, FALSE);
+  std::thread leaveWatcher(watchForLeave);
+  g_main_loop_run(g_bot.loop);
 
-  // TODO(host): IMeetingService::Join(joinParam) built from join->meetingNumber,
-  // join->passcode, join->botDisplayName. On the SDK's
-  // onMeetingStatusChanged(MEETING_STATUS_INMEETING) callback, call
-  // videoSource.onStartSend() and THEN emit "joined" (captureId = the SDK's
-  // session/renderer handle id; kind = "composited" | "raw" per config.toml).
-  videoSource.onStartSend();
-  const std::string captureId = "TODO-host-session-handle";
-  wave::ipc::emitJoined(captureId, "composited");
-
-  // 2) media-frames + leave: heartbeat while a dedicated thread watches stdin
-  // for the leave command (kept off the SDK's own pump thread so a slow/blocked
-  // read never stalls meeting processing).
-  std::atomic<bool> leaving{false};
-  std::thread leaveWatcher(watchForLeave, std::ref(leaving));
-
-  long seq = 0;
-  while (!leaving.load()) {
-    // TODO(host): drive the Zoom SDK's message loop tick here — the Linux SDK
-    // requires the host app to pump it periodically (see the upstream
-    // sample's main loop, ADAPTATION.md §event loop). This stub only
-    // heartbeats on a timer.
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-    if (!leaving.load()) wave::ipc::emitMediaFrame(seq++, 0);
-  }
-  if (leaveWatcher.joinable()) leaveWatcher.join();
-
-  // TODO(host): videoSource.onStopSend() already covered by its destructor;
-  // still call IMeetingService::Leave() and UninitSDK() here before exit.
+  // 5) Teardown.
   videoSource.onStopSend();
-  wave::ipc::emitLeft();
+  if (g_bot.meetingService != nullptr) DestroyMeetingService(g_bot.meetingService);
+  if (g_bot.authService != nullptr) DestroyAuthService(g_bot.authService);
+  CleanUPSDK();
+
+  if (!g_bot.terminalEmitted) {
+    if (g_bot.joinedEmitted) {
+      wave::ipc::emitLeft();
+    } else {
+      wave::ipc::emitError("bot exited before joining");
+    }
+    g_bot.terminalEmitted = true;
+  }
+
+  if (leaveWatcher.joinable()) {
+    // Unblock the getline if stdin is still open.
+    leaveWatcher.detach();
+  }
+  g_main_loop_unref(g_bot.loop);
   return 0;
 }

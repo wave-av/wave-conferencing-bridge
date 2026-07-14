@@ -15,11 +15,10 @@ FROM debian:bookworm-slim AS build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake pkg-config \
-    # TODO(host): add whatever the Zoom Meeting SDK for Linux itself requires
-    # at build/run time — per its README this has historically included Qt
-    # runtime libs (libxcb*, libgl1, libdbus-1-3, libgbm1) and a decode lib
-    # (e.g. ffmpeg/libavcodec) for WaveLoopedVideoSource. Confirm the exact
-    # list against the SDK version actually mounted; do not guess at runtime.
+    # glib dev headers: main.cpp runs a GMainLoop (the Meeting SDK for Linux is
+    # glib-driven — libmeetingsdk.so NEEDs libglib-2.0/gio/gobject, confirmed
+    # via objdump on 7.1.0.4100). Resolved through pkg-config in CMakeLists.txt.
+    libglib2.0-dev \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -40,9 +39,14 @@ RUN cmake -B build -DZOOM_SDK_DIR=${ZOOM_SDK_DIR} && cmake --build build --confi
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # TODO(host): the Meeting SDK for Linux runtime deps (see build stage
-    # note above) must be installed here too — a static/self-contained build
-    # would avoid this, but is not assumed.
+    # Meeting SDK for Linux runtime deps — pinned from libmeetingsdk.so's
+    # DT_NEEDED (objdump -p, SDK 7.1.0.4100). Qt6 libs are NOT apt-installed:
+    # they ship in the SDK's qt_libs/ (copied below, on LD_LIBRARY_PATH) so the
+    # bundled versions match. glib + X11/xcb + gbm/drm/GL/dbus/atomic here.
+    libglib2.0-0 libatomic1 libdbus-1-3 \
+    libx11-6 libxcb1 libxcb-xfixes0 libxcb-shape0 libxcb-shm0 libxcb-randr0 \
+    libxcb-image0 libxcb-keysyms1 libxcb-xtest0 libxfixes3 \
+    libgbm1 libdrm2 libgl1 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
