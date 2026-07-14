@@ -57,28 +57,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /opt/wave
 
 COPY --from=build /build/build/wave_meeting_sdk_bot ./bin/wave_meeting_sdk_bot
-# Runtime shared libs. Observed SDK 7.1.0.4100 (see ADAPTATION.md): the core
-# libs (libmeetingsdk/libcml/libmpg123) live at the SDK ROOT, the Qt runtime
-# libs under qt_libs/. All must be on LD_LIBRARY_PATH for the bot to load.
-COPY --from=build /opt/zoom-meeting-sdk-linux/libmeetingsdk.so \
-     /opt/zoom-meeting-sdk-linux/libcml.so \
-     /opt/zoom-meeting-sdk-linux/libmpg123.so ./lib/
-# The SDK ships each lib as a bare *.so file, but their SONAMEs are versioned
-# (libmeetingsdk.so.1, libmpg123.so.0 — confirmed via objdump), so the dynamic
-# loader looks for those names. Symlink them (libcml.so's SONAME is unversioned,
-# so it needs none).
-RUN ln -sf libmeetingsdk.so /opt/wave/lib/libmeetingsdk.so.1 \
- && ln -sf libmpg123.so /opt/wave/lib/libmpg123.so.0
-COPY --from=build /opt/zoom-meeting-sdk-linux/qt_libs/ ./lib/
-# The bundled Qt6 libs are nested at qt_libs/Qt/lib/*.so.6 (confirmed on
-# 7.1.0.4100), so after the COPY they sit at /opt/wave/lib/Qt/lib — that dir
-# MUST be on LD_LIBRARY_PATH alongside the flat core libs in /opt/wave/lib.
-ENV LD_LIBRARY_PATH=/opt/wave/lib:/opt/wave/lib/Qt/lib
+# Copy the FULL SDK runtime tree, not just the .so files. The Meeting SDK for
+# Linux loads runtime RESOURCES (json/, imjs/, images/, new_home_page/, ...)
+# from the directory containing libmeetingsdk.so at runtime — copying only the
+# libs makes SDKAuth fail with SDKERR_INTERNAL_ERROR (15) even though the
+# service hub initialises. Keeping the whole tree co-located fixes that.
+COPY --from=build /opt/zoom-meeting-sdk-linux/ ./sdk/
+# The SDK ships each lib as a bare *.so, but SONAMEs are versioned
+# (libmeetingsdk.so.1, libmpg123.so.0 — objdump-confirmed); symlink them.
+RUN ln -sf libmeetingsdk.so ./sdk/libmeetingsdk.so.1 \
+ && ln -sf libmpg123.so ./sdk/libmpg123.so.0
+# libmeetingsdk + the top-level libs live at ./sdk; the bundled Qt6 libs are
+# nested at sdk/qt_libs/Qt/lib. Both must be on LD_LIBRARY_PATH.
+ENV LD_LIBRARY_PATH=/opt/wave/sdk:/opt/wave/sdk/qt_libs/Qt/lib
+# Run from the SDK dir so any cwd-relative resource lookups also resolve.
+WORKDIR /opt/wave/sdk
 
-COPY config.toml.example ./config.toml.example
+COPY config.toml.example /opt/wave/config.toml.example
 
 # Credentials arrive via env under `doppler run` (ZOOM_APPS_CLIENT_ID /
 # ZOOM_APPS_CLIENT_SECRET — see config.toml.example) — never baked into the
 # image. The bot speaks stdio JSON-lines (see ../ADAPTATION.md); it is spawned
 # by the TS process-driver adapter, not run standalone in production.
-ENTRYPOINT ["./bin/wave_meeting_sdk_bot"]
+# Absolute path: WORKDIR is /opt/wave/sdk (so the SDK finds cwd-relative
+# resources) but the binary lives at /opt/wave/bin.
+ENTRYPOINT ["/opt/wave/bin/wave_meeting_sdk_bot"]

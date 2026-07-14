@@ -91,6 +91,12 @@ gboolean onLeaveRequested(gpointer) {
   return G_SOURCE_REMOVE;
 }
 
+// Performs SDKAuth on the loop thread, once the glib main loop is running — the
+// Linux SDK's service hub is only ready to accept auth after the loop pumps, so
+// calling SDKAuth synchronously before g_main_loop_run() returns
+// SDKERR_INTERNAL_ERROR (15). Scheduled via g_idle_add from main().
+gboolean doAuth(gpointer);
+
 class AuthEvent : public IAuthServiceEvent {
  public:
   void onAuthenticationReturn(AuthResult ret) override {
@@ -173,7 +179,32 @@ class MeetingEvent : public IMeetingServiceEvent {
         break;
     }
   }
+
+  // Remaining IMeetingServiceEvent pure-virtuals — not needed by the bot, but
+  // must be overridden for a concrete class (all no-ops).
+  void onMeetingStatisticsWarningNotification(StatisticsWarningType) override {}
+  void onMeetingParameterNotification(const MeetingParameter*) override {}
+  void onSuspendParticipantsActivities() override {}
+  void onAICompanionActiveChangeNotice(bool) override {}
+  void onMeetingTopicChanged(const zchar_t*) override {}
+  void onMeetingFullToWatchLiveStream(const zchar_t*) override {}
+  void onUserNetworkStatusChanged(MeetingComponentType, ConnectionQuality, unsigned int, bool) override {}
+  // onAppSignalPanelUpdated is #if defined(WIN32) only — not present on Linux.
 };
+
+gboolean doAuth(gpointer) {
+  AuthContext authCtx;
+  authCtx.jwt_token = g_bot.join.signature.c_str();
+  authCtx.publicAppKey = nullptr;  // ensure the alternative-auth field is not garbage
+  SDKError aerr = g_bot.authService->SDKAuth(authCtx);
+  if (aerr != SDKERR_SUCCESS) {
+    emitTerminalError("SDKAuth call rejected (SDKError=" + std::to_string(static_cast<int>(aerr)) + ")");
+    quitLoop();
+    return G_SOURCE_REMOVE;
+  }
+  wave::ipc::emitReady();
+  return G_SOURCE_REMOVE;
+}
 
 // stdin watcher thread: blocks on getline; on {"cmd":"leave"} (or EOF/parent
 // death) marshals a leave onto the loop thread.
@@ -207,9 +238,11 @@ int main() {
   initParam.strWebDomain = "https://zoom.us";
   initParam.strSupportUrl = "https://zoom.us";
   initParam.emLanguageID = LANGUAGE_English;
-  initParam.enableLogByDefault = false;
-  if (InitSDK(initParam) != SDKERR_SUCCESS) {
-    wave::ipc::emitError("InitSDK failed");
+  initParam.enableLogByDefault = true;   // SDK writes diagnostic logs (auth failures etc.)
+  initParam.enableGenerateDump = true;
+  SDKError ierr = InitSDK(initParam);
+  if (ierr != SDKERR_SUCCESS) {
+    wave::ipc::emitError("InitSDK failed (SDKError=" + std::to_string(static_cast<int>(ierr)) + ")");
     return 1;
   }
 
@@ -228,17 +261,12 @@ int main() {
   wave::WaveLoopedVideoSource videoSource(g_bot.join.videoUri, g_bot.join.videoFps);
   g_bot.videoSource = &videoSource;
 
-  AuthContext authCtx;
-  authCtx.jwt_token = g_bot.join.signature.c_str();
-  if (g_bot.authService->SDKAuth(authCtx) != SDKERR_SUCCESS) {
-    wave::ipc::emitError("SDKAuth call rejected");
-    return 1;
-  }
-  wave::ipc::emitReady();
-
-  // 4) Run the glib main loop: SDK callbacks (auth return, meeting status) fire
-  //    here and drive join → publish → leave. The stdin watcher marshals leave.
+  // 4) Run the glib main loop: SDKAuth is deferred onto the loop (doAuth via
+  //    g_idle_add) because the SDK service hub only accepts auth once the loop
+  //    is pumping; SDK callbacks (auth return, meeting status) fire here and
+  //    drive join → publish → leave. The stdin watcher marshals leave.
   g_bot.loop = g_main_loop_new(nullptr, FALSE);
+  g_idle_add(doAuth, nullptr);
   std::thread leaveWatcher(watchForLeave);
   g_main_loop_run(g_bot.loop);
 
