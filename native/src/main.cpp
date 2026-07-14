@@ -114,18 +114,25 @@ class AuthEvent : public IAuthServiceEvent {
     g_bot.meetingService->SetEvent(meetingEvent_);
 
     // Register the raw external video source BEFORE Join so the SDK routes our
-    // frames instead of a real camera.
-    IZoomSDKVideoSourceHelper* vhelper = GetRawdataVideoSourceHelper();
-    if (vhelper == nullptr) {
-      emitTerminalError("GetRawdataVideoSourceHelper returned null (rawdata not available)");
-      quitLoop();
-      return;
-    }
-    SDKError vset = vhelper->setExternalVideoSource(g_bot.videoSource, FrameDataFormat_I420_FULL);
-    if (vset != SDKERR_SUCCESS) {
-      emitTerminalError("setExternalVideoSource failed (SDKError=" + std::to_string(static_cast<int>(vset)) + ")");
-      quitLoop();
-      return;
+    // frames instead of a real camera. Diagnostic escape hatch: WAVE_BOT_NO_VIDEO
+    // skips the external source to isolate whether the raw-video media negotiation
+    // is what tears down the meeting session before INMEETING.
+    if (std::getenv("WAVE_BOT_NO_VIDEO") == nullptr) {
+      IZoomSDKVideoSourceHelper* vhelper = GetRawdataVideoSourceHelper();
+      if (vhelper == nullptr) {
+        emitTerminalError("GetRawdataVideoSourceHelper returned null (rawdata not available)");
+        quitLoop();
+        return;
+      }
+      SDKError vset = vhelper->setExternalVideoSource(g_bot.videoSource, FrameDataFormat_I420_FULL);
+      if (vset != SDKERR_SUCCESS) {
+        emitTerminalError("setExternalVideoSource failed (SDKError=" + std::to_string(static_cast<int>(vset)) + ")");
+        quitLoop();
+        return;
+      }
+    } else {
+      fprintf(stderr, "[diag] WAVE_BOT_NO_VIDEO set — skipping external video source\n");
+      fflush(stderr);
     }
 
     const UINT64 mn = static_cast<UINT64>(std::strtoull(g_bot.join.meetingNumber.c_str(), nullptr, 10));
