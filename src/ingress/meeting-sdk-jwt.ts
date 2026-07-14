@@ -20,6 +20,16 @@ import { createHmac } from 'node:crypto';
 /** Zoom's maximum Meeting-SDK token lifetime: 48 hours (seconds). */
 export const MEETING_SDK_MAX_TTL_SEC = 48 * 60 * 60;
 
+/**
+ * Zoom's MINIMUM Meeting-SDK token lifetime: 30 minutes (seconds). A token whose
+ * `tokenExp`/`exp` is less than iat+30m is rejected by the native SDK synchronously
+ * as SDKError=15 (INTERNAL_ERROR) — a misleading code that reads like an internal
+ * fault, not a token problem. This floor makes that failure impossible by construction.
+ * (PROVEN on the ssdnas native bot 2026-07-13: a 5-min token → SDKError=15; a 2h
+ * token → SDKAuth success. See memory zoom-meeting-sdk-bot-88-nas-build-2026-07-13.)
+ */
+export const MEETING_SDK_MIN_TTL_SEC = 30 * 60;
+
 /** Meeting-SDK role: 0 = attendee/participant (a perception bot), 1 = host. */
 export type MeetingSdkRole = 0 | 1;
 
@@ -34,7 +44,7 @@ export interface MeetingSdkJwtParams {
   role?: MeetingSdkRole;
   /** Issued-at (unix seconds). Injectable so the token is deterministic in tests. */
   iat: number;
-  /** Expiry (unix seconds). Must satisfy iat < exp <= iat + MEETING_SDK_MAX_TTL_SEC. */
+  /** Expiry (unix seconds). Must satisfy iat + MEETING_SDK_MIN_TTL_SEC <= exp <= iat + MEETING_SDK_MAX_TTL_SEC. */
   exp: number;
 }
 
@@ -65,6 +75,7 @@ export function meetingSdkJwt(params: MeetingSdkJwtParams): string {
   if (!Number.isInteger(iat) || !Number.isInteger(exp)) throw new Error('meeting-sdk jwt: iat/exp must be integer unix seconds');
   if (iat <= 0) throw new Error('meeting-sdk jwt: iat must be a positive unix timestamp');
   if (exp <= iat) throw new Error('meeting-sdk jwt: exp must be after iat');
+  if (exp - iat < MEETING_SDK_MIN_TTL_SEC) throw new Error('meeting-sdk jwt: lifetime below Zoom 30-min minimum (rejected as SDKError=15)');
   if (exp - iat > MEETING_SDK_MAX_TTL_SEC) throw new Error('meeting-sdk jwt: lifetime exceeds the 48h Zoom maximum');
   const header = { alg: 'HS256', typ: 'JWT' };
   // `appKey` and `sdkKey` both carry the SDK Key (Zoom accepts either across SDK versions); `tokenExp`

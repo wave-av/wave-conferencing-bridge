@@ -6,6 +6,7 @@ import {
   signHs256Jwt,
   meetingSdkJwt,
   MEETING_SDK_MAX_TTL_SEC,
+  MEETING_SDK_MIN_TTL_SEC,
 } from './meeting-sdk-jwt.js';
 
 /** Decode a base64url JWT segment back to a parsed object. */
@@ -81,5 +82,13 @@ describe('meetingSdkJwt', () => {
     expect(() => meetingSdkJwt({ ...base, iat: -1, exp: 3600 })).toThrow(/positive unix timestamp/);
     expect(() => meetingSdkJwt({ ...base, exp: base.iat })).toThrow(/after iat/);
     expect(() => meetingSdkJwt({ ...base, exp: base.iat + MEETING_SDK_MAX_TTL_SEC + 1 })).toThrow(/48h/);
+  });
+
+  it('fails closed BELOW the 30-min minimum lifetime (would reject as SDKError=15)', () => {
+    // A 5-min token is exactly what caused the #88 SDKAuth INTERNAL_ERROR before the fix.
+    expect(() => meetingSdkJwt({ ...base, exp: base.iat + 300 })).toThrow(/30-min minimum|SDKError=15/);
+    expect(() => meetingSdkJwt({ ...base, exp: base.iat + MEETING_SDK_MIN_TTL_SEC - 1 })).toThrow(/30-min minimum/);
+    // Exactly at the floor is allowed.
+    expect(() => meetingSdkJwt({ ...base, exp: base.iat + MEETING_SDK_MIN_TTL_SEC })).not.toThrow();
   });
 });
