@@ -1,0 +1,35 @@
+spike/meeting-sdk-linux-arm64/run-join.sh
+  s_763704559b8a10::t_f4111f4d556739 1-111
+spike/meeting-sdk-linux-arm64/sign-join-token.mjs
+  s_763704559b8a10::t_c159c20c323a06 1-75
+spike/meeting-sdk-linux-arm64/config.example.toml
+  s_763704559b8a10::t_847a70f1a4d052 1-38
+spike/meeting-sdk-linux-arm64/lib.sh
+  s_763704559b8a10::t_d0209559df2cf7 1-50
+spike/meeting-sdk-linux-arm64/prepare-pi.sh
+  s_763704559b8a10::t_248efca78cb2ea 1-175
+spike/meeting-sdk-linux-arm64/build.sh
+  s_763704559b8a10::t_72c03e861292b5 1-57
+spike/meeting-sdk-linux-arm64/sign-join-token.test.ts
+  s_763704559b8a10::t_891a79ed4ee907 1-65
+spike/meeting-sdk-linux-arm64/README.md
+  s_763704559b8a10::t_5aef17bd056c37 1-132
+.gitignore
+  s_763704559b8a10::t_610d955372c633 21-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "f5b3bd17767e9e732650a6f383655f4df6b53648",
+  "prompts": {},
+  "sessions": {
+    "s_763704559b8a10": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e77ba90b-211c-4f34-9fdd-ec883ec30c42",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Jake Fineman <jakefineman@gmail.com>"
+    }
+  }
+}
