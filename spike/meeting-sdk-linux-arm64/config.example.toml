@@ -1,0 +1,38 @@
+#### Zoom meetingsdk-headless-linux-sample config — PLACEHOLDERS ONLY.
+#### Copy to config.toml (gitignored), chmod 600, fill from Doppler. Never commit the copy.
+####
+#### Shape source: sample.config.toml + src/Config.cpp (CLI11 config file) at the pinned sha
+#### c10031ec1b901494f30d1c6e7d075b6da3f83718. Any CLI option can be set here by its long name.
+#### Format: https://cliutils.github.io/CLI11/book/chapters/config.html#configure-file-format
+
+# Meeting SDK "SDK Key"/"SDK Secret" = the WAVE General app's Client ID / Client Secret.
+# Env names per src/types/meeting-sdk.ts DEFAULT_MEETING_SDK_CREDENTIAL_REF:
+#   doppler secrets get ZOOM_APPS_CLIENT_ID     --project wave --config prd --plain
+#   doppler secrets get ZOOM_APPS_CLIENT_SECRET --project wave --config prd --plain
+client-id = "<ZOOM_APPS_CLIENT_ID>"
+client-secret = "<ZOOM_APPS_CLIENT_SECRET>"
+
+# EITHER a join-url ...
+# join-url = "https://zoom.us/j/<meeting-number>?pwd=<passcode>"
+# ... OR meeting-id + password (9-11 digit meeting number; passcode as shown in the invite).
+meeting-id = "<MEETING_NUMBER>"
+password = "<MEETING_PASSCODE>"
+
+# Participant-list name for the Pi.
+display-name = "WAVE Room (Pi 5)"
+
+# Optional. NOTE: `join-token` is an *App Privilege* token (JoinParam.app_privilege_token),
+# NOT the Meeting-SDK auth JWT — the sample mints its own auth JWT from client-id/secret.
+# The token printed by sign-join-token.mjs (repo signer `meetingSdkJwt`) is that auth JWT and is
+# only consumed once the sample is patched to accept an external one (see README, UNPROVEN #6).
+# join-token = ""
+# zak = ""
+# host = "https://zoom.us"
+
+# Raw RECORDING (receive side) — writes into <sample>/out/. Leave enabled so the join receipt
+# also proves the raw-data pipeline works on arm64.
+[RawVideo]
+file = "meeting-video.yuv"
+
+[RawAudio]
+file = "meeting-audio.pcm"
