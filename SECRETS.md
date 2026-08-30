@@ -17,3 +17,16 @@ No secrets. CI uses default `GITHUB_TOKEN` for the foundation gate.
 
 `WAVE_RTMP_BASE` defaults to `rtmps://ingest.wave.online/live` — public by
 design; the stream key is what carries the auth.
+
+
+## Machine surface
+
+```yaml secrets-contract
+version: "0.1"
+secrets: []
+deny_paths:
+  - ".dev.vars"
+  - ".dev.vars.*"
+  - ".env"
+  - ".env.*"
+```
