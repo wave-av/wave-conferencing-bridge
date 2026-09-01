@@ -1,0 +1,19 @@
+SECRETS.md
+  s_ebe4d105144d71::t_acdc32af02ad47 20-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "760e6b79b9eb3d92b69a0e6f8d6dbec50793a7cc",
+  "prompts": {},
+  "sessions": {
+    "s_ebe4d105144d71": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_fac973e8dffekEggrvsuF5nvDo",
+        "model": "glm-5.3"
+      },
+      "human_author": "Jake Fineman <jakefineman@gmail.com>"
+    }
+  }
+}
