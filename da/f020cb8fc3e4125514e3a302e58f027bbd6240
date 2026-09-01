@@ -1,0 +1,19 @@
+.github/workflows/issue-ops-triage.yml
+  s_6251ef724dd31c::t_2d1fa1206610b5 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "daf020cb8fc3e4125514e3a302e58f027bbd6240",
+  "prompts": {},
+  "sessions": {
+    "s_6251ef724dd31c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-adba8b0d59d6b3189",
+        "model": "unknown"
+      },
+      "human_author": "Jake Fineman <jakefineman@gmail.com>"
+    }
+  }
+}
