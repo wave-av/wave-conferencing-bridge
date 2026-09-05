@@ -1,0 +1,42 @@
+spike/meeting-sdk-linux-arm64/lib.sh
+  s_49793c5a9de056::t_97f4ee89e403e2 11-12
+  s_59a75e32133baa::t_d3886cf99eb1f0 30
+spike/meeting-sdk-linux-arm64/README.md
+  s_59a75e32133baa::t_be99ca3d55aef9 17,91-92
+spike/meeting-sdk-linux-arm64/prepare-pi.sh
+  s_59a75e32133baa::t_72495c2bf1aa14 94-109,113-114,120,123,185-195
+spike/meeting-sdk-linux-arm64/run-join.sh
+  s_bbd6a472b3b6ca::t_76b6600752cd12 47,103,106,108,114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "5be7c4b3161944de3ff0c61383ac88ff8843110a",
+  "prompts": {},
+  "sessions": {
+    "s_49793c5a9de056": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d315ea56-91aa-4d81-9939-eac4eba83179",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Jake Fineman <jakefineman@gmail.com>"
+    },
+    "s_59a75e32133baa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a474e7391281b91cc",
+        "model": "unknown"
+      },
+      "human_author": "Jake Fineman <jakefineman@gmail.com>"
+    },
+    "s_bbd6a472b3b6ca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a0695ac9a3d636d81",
+        "model": "unknown"
+      },
+      "human_author": "Jake Fineman <jakefineman@gmail.com>"
+    }
+  }
+}
