@@ -56,12 +56,32 @@ planMeetingSdkBotFarm(config)         bindMeetingSdkIngress(config)
    satisfied. What remains for Wave-2 is the runtime: adding the Zoom Meeting
    SDK dependency + the headless client that performs the join and media pull.
 
-## Wave-2 (not in this PR)
+## Wave-2 (the join path)
 
-- Add the Zoom Meeting SDK dependency (Linux/headless variant for the bot farm).
-- Implement the join + raw-media capture + republish to `waveTarget`.
+The join orchestration now lives in `src/ingress/meeting-sdk-launch.ts`
+(`launchMeetingSdkBot` / `launchMeetingSdkBotFarm`), **double-gated + INERT by
+default**. A join happens only when BOTH hold:
+
+1. the flag `ZOOM_MEETING_SDK_INGRESS_ENABLED` is ON (defaults OFF/absent), and
+2. the Meeting-SDK credential is present (`isMeetingSdkArmed`).
+
+If either is false the launcher returns `{ status: 'planning-only', reason }`
+touching **no seam** — no network, no credential read, no Zoom join. When armed
++ enabled it: signs the join JWT (`meetingSdkJwt`) → `MeetingSdkJoinClient.join`
+→ meters the tapped media through the `MediaTapMeter` (#91) seam → republishes to
+the WaveTarget's WHIP endpoint via `WhipPublisher`.
+
+The join path is expressed against **injectable seams**. The concrete transports
+are a later ◆ — the default `inertJoinClient` / `inertWhipPublisher` THROW if
+invoked, so even a mis-armed ON path fails closed rather than reaching a live
+meeting. Still not proven live (needs a real meeting + a native headless driver).
+
+### Later ◆ (not in this PR)
+
+- Ship the native headless Zoom Meeting-SDK driver (Linux bot-farm build) behind
+  `MeetingSdkJoinClient`, and the real WHIP transport behind `WhipPublisher`.
 - Watermark/label the looped source so farm media is self-identifying in the index.
-- Meter the tapped media through the same one-subscribe surface as M1 (#91).
+- Wire the real #91 one-subscribe media-tap surface behind `MediaTapMeter`.
 
 ## Durability note
 
