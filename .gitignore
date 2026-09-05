@@ -18,3 +18,9 @@ dist/
 .claude/agent-memory/
 .claude/.DS_Store
 # <<< wave claude-project-chassis (managed) <<<
+
+# spike/meeting-sdk-linux-arm64 — licence-gated Zoom SDK bytes, cloned sample, receipts, real config
+spike/meeting-sdk-linux-arm64/vendor/
+spike/meeting-sdk-linux-arm64/meetingsdk-headless-linux-sample/
+spike/meeting-sdk-linux-arm64/receipts/
+spike/meeting-sdk-linux-arm64/config.toml
