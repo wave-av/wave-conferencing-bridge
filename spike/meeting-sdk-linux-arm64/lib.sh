@@ -8,6 +8,8 @@ SAMPLE_REPO="https://github.com/zoom/meetingsdk-headless-linux-sample.git"
 SAMPLE_SHA="c10031ec1b901494f30d1c6e7d075b6da3f83718"   # 2025-11-04 "updated comments"
 SAMPLE_GLIBC_FLOOR="2.35"                                 # Ubuntu 22.04 = Zoom's documented prereq
 VCPKG_ROOT="${VCPKG_ROOT:-/opt/vcpkg}"                    # sample CMakePresets.json hard-wires this
+VCPKG_REPO="https://github.com/microsoft/vcpkg.git"
+VCPKG_SHA="c76c06644034521fb761a39f8f52d8e87d1103d5"      # tag 2026.07.29, reviewed at pin time
 
 # --- layout -------------------------------------------------------------------
 SPIKE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,6 +27,7 @@ ts() { date -u +%Y%m%dT%H%M%SZ; }
 receipt_open() {
   local name="${1:?receipt name}"
   mkdir -p "${RECEIPTS_DIR}"
+  chmod 0700 "${RECEIPTS_DIR}"
   RECEIPT="${RECEIPTS_DIR}/${name}-$(ts).log"
   : > "${RECEIPT}"
   log "receipt: ${RECEIPT}"

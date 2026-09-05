@@ -91,27 +91,37 @@ fi
 CMAKE_VER="$(cmake --version | head -n1)"
 log "cmake: ${CMAKE_VER} (sample floor: 3.22.1)"
 
+# Fetch a pinned sha into a repo clone (cloning first if absent) and detach onto it.
+# Only fetches when the sha is not already present locally, and fails loud (via die)
+# rather than letting a swallowed fetch error surface as a raw git-checkout error.
+checkout_pinned_sha() {
+  local repo="${1:?repo url}" dir="${2:?dir}" sha="${3:?sha}"
+  if [[ ! -d "${dir}/.git" ]]; then
+    log "cloning ${repo} -> ${dir}"
+    git clone --quiet "${repo}" "${dir}"
+  fi
+  if ! git -C "${dir}" cat-file -e "${sha}^{commit}" 2>/dev/null; then
+    git -C "${dir}" fetch --quiet origin "${sha}" || die "could not fetch pinned sha ${sha} from ${repo}"
+  fi
+  git -C "${dir}" checkout --quiet --detach "${sha}"
+  [[ "$(git -C "${dir}" rev-parse HEAD)" == "${sha}" ]] || die "${dir} is not at the pinned sha ${sha}"
+}
+
 # ---------------------------------------------------------------- 2. vcpkg
 if [[ ! -x "${VCPKG_ROOT}/vcpkg" ]]; then
   [[ "$(id -u)" -eq 0 ]] || die "vcpkg bootstrap into ${VCPKG_ROOT} needs root"
-  log "vcpkg: cloning into ${VCPKG_ROOT}"
-  git clone --depth 1 https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}"
+  log "vcpkg: cloning into ${VCPKG_ROOT} @ pinned ${VCPKG_SHA}"
+  checkout_pinned_sha "${VCPKG_REPO}" "${VCPKG_ROOT}" "${VCPKG_SHA}"
   ( cd "${VCPKG_ROOT}" && VCPKG_FORCE_SYSTEM_BINARIES=1 ./bootstrap-vcpkg.sh -disableMetrics )
   ln -sf "${VCPKG_ROOT}/vcpkg" /usr/local/bin/vcpkg
 else
   log "vcpkg: present at ${VCPKG_ROOT}"
 fi
-log "vcpkg: $(git -C "${VCPKG_ROOT}" rev-parse --short HEAD 2>/dev/null || echo '?')"
+log "vcpkg: $(git -C "${VCPKG_ROOT}" rev-parse --short HEAD 2>/dev/null || echo '?') (pinned ${VCPKG_SHA})"
 
 # ---------------------------------------------------------------- 3. sample @ pinned sha
-if [[ ! -d "${SAMPLE_DIR}/.git" ]]; then
-  log "sample: cloning ${SAMPLE_REPO}"
-  git clone --quiet "${SAMPLE_REPO}" "${SAMPLE_DIR}"
-fi
-git -C "${SAMPLE_DIR}" fetch --quiet origin "${SAMPLE_SHA}" || true
-git -C "${SAMPLE_DIR}" checkout --quiet --detach "${SAMPLE_SHA}"
+checkout_pinned_sha "${SAMPLE_REPO}" "${SAMPLE_DIR}" "${SAMPLE_SHA}"
 log "sample: $(git -C "${SAMPLE_DIR}" rev-parse HEAD) (pinned ${SAMPLE_SHA})"
-[[ "$(git -C "${SAMPLE_DIR}" rev-parse HEAD)" == "${SAMPLE_SHA}" ]] || die "sample is not at the pinned sha"
 
 # ---------------------------------------------------------------- 4. SDK tarball
 if [[ -z "${SDK_TARBALL}" ]]; then
@@ -170,6 +180,17 @@ log "glibc host: ${HOST_GLIBC} | required by .so: ${SO_GLIBC:-unknown} | doc flo
 if command -v ldd >/dev/null; then
   log "ldd unresolved: $(ldd "${SDK_LIB_DIR}/libmeetingsdk.so" 2>&1 | grep -c 'not found' || true) missing shared libs (see receipt for the list)"
   ldd "${SDK_LIB_DIR}/libmeetingsdk.so" 2>&1 | grep 'not found' >> "${RECEIPT}" || true
+fi
+
+# ---------------------------------------------------------------- 6. ownership
+# When invoked as `sudo ./prepare-pi.sh`, everything this script writes under the repo
+# (SAMPLE_DIR clone, SDK_LIB_DIR unpack, RECEIPTS_DIR) lands root-owned. build.sh and
+# run-join.sh are documented to run as the plain invoking user afterward and would then
+# fail to write build artifacts / join receipts. Hand ownership back to $SUDO_USER.
+if [[ "$(id -u)" -eq 0 && -n "${SUDO_USER:-}" ]]; then
+  log "ownership: chown -R ${SUDO_USER} ${SAMPLE_DIR} ${RECEIPTS_DIR}"
+  chown -R "${SUDO_USER}:$(id -gn "${SUDO_USER}")" "${SAMPLE_DIR}" "${RECEIPTS_DIR}" 2>/dev/null || \
+    log "warn: could not chown workspace back to ${SUDO_USER}; build.sh/run-join.sh may need sudo too"
 fi
 
 log "DONE prepare — next: ${HERE}/build.sh"

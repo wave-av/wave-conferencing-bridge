@@ -14,7 +14,7 @@ The Zoom Meeting SDK for Linux is **licence-gated and not in this repo**. The
 harness expects the arm64 tarball at a gitignored path and fails loud if it is
 missing:
 
-```
+```text
 spike/meeting-sdk-linux-arm64/vendor/zoom-sdk/zoom-meeting-sdk-linux_arm64-<ver>.tar.xz
 ```
 
@@ -88,6 +88,8 @@ mkdir -p spike/meeting-sdk-linux-arm64/vendor/zoom-sdk
 cp ~/Downloads/zoom-meeting-sdk-linux_arm64-*.tar.xz spike/meeting-sdk-linux-arm64/vendor/zoom-sdk/
 
 # 1. deps + sample + SDK unpack + arch/glibc receipts
+# (prepare-pi.sh chowns the workspace it writes back to $SUDO_USER on exit, so
+# build.sh / run-join.sh below can run as your normal user)
 sudo spike/meeting-sdk-linux-arm64/prepare-pi.sh
 
 # 2. build

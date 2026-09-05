@@ -44,7 +44,7 @@ if grep -qE '<ZOOM_APPS_CLIENT_(ID|SECRET)>|<MEETING_NUMBER>' "${CONFIG_FILE}"; 
   die "config.toml still has placeholders — fill client-id / client-secret / meeting-id"
 fi
 PERM="$(stat -c %a "${CONFIG_FILE}" 2>/dev/null || echo '?')"
-[[ "${PERM}" == "600" ]] || log "warn: config.toml mode is ${PERM}; it holds the client secret — chmod 600 it"
+[[ "${PERM}" == "600" ]] || die "config.toml mode is ${PERM}; it holds the client secret — chmod 600 it"
 
 # --- audio device: the sample's entry.sh needs a PulseAudio sink to exist ---------------
 if [[ "${USE_PULSE}" -eq 1 ]]; then
@@ -100,12 +100,15 @@ END_EPOCH="$(date -u +%s)"
   printf -- '--- verdict ---\n'
   if grep -qiE 'MEETING_STATUS_INMEETING|joined|in meeting' "${RECEIPT}"; then
     printf 'JOINED: yes\n'
+    JOINED=1
   else
     printf 'JOINED: no (no in-meeting status line seen within %ss)\n' "${TIMEOUT_SEC}"
+    JOINED=0
   fi
-  if [[ -n "${CAMERA}" ]]; then printf 'CAMERA CAPTURE: %s\n' "$(grep -c 'PROVEN capture leg' "${RECEIPT}")x proven, injection NOT wired\n"; fi
+  if [[ -n "${CAMERA}" ]]; then printf 'CAMERA CAPTURE: %sx proven, injection NOT wired\n' "$(grep -c 'PROVEN capture leg' "${RECEIPT}")"; fi
   printf 'raw recording out dir: %s/out\n' "${SAMPLE_DIR}"
 } > "${SUMMARY}"
 
 log "receipt summary: ${SUMMARY}"
 cat "${SUMMARY}"
+[[ "${JOINED}" -eq 1 ]] || exit 1
